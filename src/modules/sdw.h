@@ -25,10 +25,10 @@ public:
     ~Sdw();
     bool begin(uint8_t csPin = 5, uint8_t clPin = -1, uint8_t soPin = -1, uint8_t siPin = -1,
                bool useMutex = true, uint32_t freqHz = 4000000);
-
-    bool ok() const { return _ok; };
+    bool ok(void);
 
     void flush_file();
+    uint64_t size_file(void);
     void close_file();
 
     bool mounted() const { return _mounted; };
@@ -41,7 +41,6 @@ public:
     uint64_t free(void);
 
     bool test(void);
-
     void call(SdwEventCallback callback) { _callback = callback; }
     SdwEvent last() const { return _last; }
 
@@ -51,17 +50,14 @@ public:
     bool writeLine(const char *line);
 
     void listDir(const char *dirPath = "/", bool recursive = true, Stream &out = Serial);
+    uint32_t countFiles(const char *dirPath = "/", bool recursive = true);
 
 private:
     uint8_t _csPin = 5, _clPin = -1, _soPin = -1, _siPin = -1;
     uint32_t _freqHz = 4000000;
-    bool _ok = false;
 
     bool _is_open = false;
     bool _mounted = false;
-
-    uint32_t countFiles(const char *dirPath = "/", bool recursive = true);
-    uint32_t countFilesRecursive(File dir, bool recursive);
 
     SdwEventCallback _callback = nullptr;
     SdwEvent _last = SdwEvent::None;

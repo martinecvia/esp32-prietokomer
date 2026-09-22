@@ -1,6 +1,7 @@
 #pragma once
 
 #include <Arduino.h>
+#include <RTClib.h>
 
 /*
 https://dratek.cz/arduino-platforma/1261-rtc-hodiny-realneho-casu-ds3231-at24c32-iic-pametovy-modul-pro-arduino.html
@@ -36,18 +37,12 @@ class Rtc
 public:
     ~Rtc();
     bool begin(uint8_t i2c_addr = 0x57, uint8_t rtc_addr = 0x68);
-    bool ok() const { return _ok; }
+    bool ok(void) const { return _ok; }
 
-    void displayTime();
+    DateTime now(void);
 
 private:
     uint8_t _i2c_addr, _rtc_addr;
+    RTC_DS3231 _rtc;
     bool _ok = false;
-
-    byte bcdDec(byte val);
-    byte decBcd(byte val);
-    void setRtcTime(byte s, byte m, byte h,
-                    byte D, byte d, byte M, byte Y);
-    void getRtcTime(byte *s, byte *m, byte *h,
-                    byte *D, byte *d, byte *M, byte *Y);
 };

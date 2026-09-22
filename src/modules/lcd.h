@@ -80,6 +80,11 @@ public:
 
     bool begin(uint8_t i2c_addr = 0x3C)
     {
+        _i2c_addr = i2c_addr;
+        Wire.beginTransmission(i2c_addr);
+        bool is_i2c = (Wire.endTransmission() == 0);
+        Serial.printf("LCD init result: is_i2c(0x%02X) = %d\n",
+                      i2c_addr, is_i2c);
         _ok = LcdInitializer<T>::begin(_lcd, i2c_addr);
 
         if (_ok)
@@ -123,6 +128,7 @@ public:
     }
 
 private:
+    uint8_t _i2c_addr;
     T _lcd;
     bool _ok = false;
 };

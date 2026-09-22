@@ -38,6 +38,7 @@ public:
     void temperatureCompensation(float k);
 
 private:
+    uint8_t _i2c_addr;
     Adafruit_BME280 _bme;
     bool _ok = false;
 };

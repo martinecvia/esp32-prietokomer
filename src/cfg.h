@@ -20,8 +20,8 @@
 #define PIN_BUTTON_3_CYBLE_NF1 25
 #define CYBLE_NF1_DEBOUNCE_MS 15
 // Buttons
-#define PIN_BUTTON_1 27
-#define PIN_BUTTON_2 26
+#define PIN_BUTTON_1 34
+#define PIN_BUTTON_2 35
 #define BUTTON_DEBOUNCE_MS 30
 // LED
 #define PIN_LED_R 32

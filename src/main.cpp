@@ -84,25 +84,23 @@ void render()
     char buf[24];
     lcd.clear();
 
-    uint16_t rgb_red = ((255 & 0xF8) << 8) | ((0 & 0xFC) << 3) | (0 >> 3);
-
     snprintf(buf, sizeof(buf), "%.1f", s.flow);
     lcd.print(buf, 0, 0, 3);
     snprintf(buf, sizeof(buf), "%02u:%02u", s.h, s.m);
-    lcd.print(buf, __lcd_r(buf, 1), 0, 1);
+    lcd.print(buf, __lcd_r(buf, 1), 0);
     snprintf(buf, sizeof(buf), "%.1fC", s.t);
-    lcd.print(buf, __lcd_r(buf, 1), 8, 1);
-    lcd.print("l/m", 110, 16, 1, rgb_red);
+    lcd.print(buf, __lcd_r(buf, 1), 8);
+    lcd.print("l/m", 110, 16);
     snprintf(buf, sizeof(buf), "#%lu", (unsigned long)s.pulseCount);
-    lcd.print(buf, 0, 24, 1);
+    lcd.print(buf, 0, 24);
     snprintf(buf, sizeof(buf), "%.1f/%.0fGB", s.sd_used, s.sd_size);
-    lcd.print(buf, __lcd_r(buf, 1), 24, 1);
+    lcd.print(buf, __lcd_r(buf, 1), 24);
 }
 
 void loop()
 {
     static uint32_t display_ms = 0;
-    if (millis() - display_ms >= 500)
+    if (millis() - display_ms >= SSD1306_FREQUENCY)
     {
         lcd.clear();
         display_ms = millis();

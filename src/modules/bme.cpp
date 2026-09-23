@@ -1,9 +1,5 @@
 #include "bme.h"
 
-Bme::~Bme()
-{
-}
-
 bool Bme::begin(uint8_t i2c_addr, TwoWire &wire)
 {
     _i2c_addr = i2c_addr;

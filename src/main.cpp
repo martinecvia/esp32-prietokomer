@@ -65,9 +65,15 @@ uint32_t __led_millis = 0;
 
 void onSdwEvent(SdwEvent event)
 {
+    Serial.printf("SDW notify calls: %d\n", (int)event);
     switch (event)
     {
     case SdwEvent::WriteOk:
+        led.off();
+        __led_is_working = true;
+        __led_millis = millis();
+        break;
+    case SdwEvent::FileOpened:
         led.off();
         __led_is_working = true;
         __led_millis = millis();
@@ -206,9 +212,9 @@ void render(void)
 void loop()
 {
     update();
-    if (bt1.pressed())
-        Serial.println("HWD nbutton 1");
-    if (bt2.pressed())
+    if (bt1.pressed() && state == SystemState::RUNNING)
+        sdw.openNewFile("/test.txt");
+    if (bt2.pressed() && state == SystemState::RUNNING)
         Serial.println("HWD nbutton 2");
     if (bt3.pressed() && state == SystemState::RUNNING)
     {
@@ -218,11 +224,15 @@ void loop()
         __led_millis = millis();
         s.pulseCount++;
     }
+
+    // LED update
     if (__led_is_working && millis() - __led_millis >= 100)
     {
         __led_is_working = false;
         changeLedForState();
     }
+
+    // LCD update
     static uint32_t display_ms = 0;
     if (millis() - display_ms >= SSD1306_FREQUENCY)
     {

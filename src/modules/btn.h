@@ -19,9 +19,7 @@ public:
 
         uint32_t time = millis();
         if (pressed && !_checked)
-        {
             _delayed = true;
-        }
         else if (!pressed && _checked && _delayed)
         {
             _delayed = true;

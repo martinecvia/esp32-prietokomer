@@ -26,19 +26,28 @@ SDO HIGH: 0x77
 class Bme
 {
 public:
-    ~Bme();
-    bool begin(uint8_t i2c_addr = 0x76);
+    Bme() = default;
+    ~Bme() = default;
+
+    Bme(const Bme &) = delete;
+    Bme &operator=(const Bme &) = delete;
+
+    bool begin(uint8_t i2c_addr = 0x76, TwoWire &wire = Wire);
     bool ok(void) const { return _ok; }
 
-    float readTemperature(void);
-    float readTemperatureCompensation(void);
-    float readPressure(void);
-    float readHumidity(void);
+    bool measure(void);
+    bool read(float &t_C, float &p_C, float &h_C);
 
-    void temperatureCompensation(float k);
+    float readTemperature(void); // °C
+    float readPressure(void);    // Pa
+    float readHumidity(void);    // %RH
+
+    float getTemperatureCompensation(void) const { return _t_Comp; }
+    void setTemperatureCompensation(float offset);
 
 private:
-    uint8_t _i2c_addr;
+    uint8_t _i2c_addr = 0x76;
     Adafruit_BME280 _bme;
     bool _ok = false;
+    float _t_Comp = 0.0f;
 };

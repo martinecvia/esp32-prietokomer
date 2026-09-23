@@ -7,7 +7,7 @@
 
 enum class SdwEvent : uint8_t
 {
-    None,
+    None = 0,
     Error,
     CardMounted,
     CardRemoved,

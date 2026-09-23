@@ -5,7 +5,7 @@
 #define PIN_SD_SCK 18
 #define PIN_SD_MISO 19
 #define PIN_SD_MOSI 23
-#define SPI_FREQUENCY 4000000
+#define SPI_FREQUENCY 1000000
 // I2C
 #define PIN_I2C_SDA 21
 #define PIN_I2C_SCL 22

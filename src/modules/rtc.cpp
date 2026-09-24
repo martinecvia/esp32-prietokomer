@@ -1,32 +1,61 @@
-#include <Wire.h>
 #include "rtc.h"
 
-Rtc::~Rtc()
-{
-}
-
-bool Rtc::begin(uint8_t i2c_addr, uint8_t rtc_addr)
+bool Rtc::begin(uint8_t i2c_addr, uint8_t rtc_addr,
+                TwoWire &wire)
 {
     _i2c_addr = i2c_addr;
     _rtc_addr = rtc_addr;
-    Wire.beginTransmission(i2c_addr);
-    bool is_i2c = (Wire.endTransmission() == 0);
-    Wire.beginTransmission(rtc_addr);
-    bool is_rtc = (Wire.endTransmission() == 0);
+
+    wire.begin();
+
+    wire.beginTransmission(i2c_addr);
+    bool is_i2c = (wire.endTransmission() == 0);
+    wire.beginTransmission(rtc_addr);
+    bool is_rtc = (wire.endTransmission() == 0);
     Serial.printf("RTC init result: is_i2c(0x%02X) = %d, is_rtc(0x%02X) = %d\n",
                   i2c_addr, is_i2c, rtc_addr, is_rtc);
-    _ok = is_i2c && is_rtc && _rtc.begin(&Wire);
-    if (_ok && _rtc.lostPower())
+    _ok = _rtc.begin(&wire);
+    if (_ok)
+        return false;
+    _lostPower = _rtc.lostPower();
+    if (_lostPower)
     {
         Serial.println("! RTC lost energy");
-        _rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        //_rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     }
-    return _ok;
+    return true;
+}
+
+bool Rtc::now(DateTime &out)
+{
+    if (!_ok)
+    {
+        out = DateTime();
+        return false;
+    }
+    out = _rtc.now();
+    return out.isValid();
 }
 
 DateTime Rtc::now(void)
 {
     if (!_ok)
-        return DateTime(F(__DATE__), F(__TIME__));
+        return DateTime();
     return _rtc.now();
+}
+
+float Rtc::temperature(void)
+{
+    if (_ok)
+        return NAN;
+    return _rtc.getTemperature();
+}
+
+bool Rtc::adjust(const DateTime &dt)
+{
+    if (_ok)
+        return false;
+    _rtc.adjust(dt);
+    _lostPower = false;
+    return true;
 }

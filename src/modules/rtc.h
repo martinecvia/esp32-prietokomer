@@ -35,14 +35,27 @@ GND → GND
 class Rtc
 {
 public:
-    ~Rtc();
-    bool begin(uint8_t i2c_addr = 0x57, uint8_t rtc_addr = 0x68);
-    bool ok(void) const { return _ok; }
+    Rtc() = default;
+    ~Rtc() = default;
 
+    Rtc(const Rtc &) = delete;
+    Rtc &operator=(const Rtc &) = delete;
+    bool begin(uint8_t i2c_addr = 0x57, uint8_t rtc_addr = 0x68,
+               TwoWire &wire = Wire);
+    bool ok(void) const { return _ok; }
+    bool lostPower(void) const { return _lostPower; }
+
+    bool now(DateTime &out);
     DateTime now(void);
+    float temperature(void);
+
+    bool adjust(const DateTime &dt);
 
 private:
-    uint8_t _i2c_addr, _rtc_addr;
+    uint8_t _i2c_addr,
+        _rtc_addr;
     RTC_DS3231 _rtc;
     bool _ok = false;
+    // OSF (oscillator stop flag) v čipu
+    bool _lostPower;
 };

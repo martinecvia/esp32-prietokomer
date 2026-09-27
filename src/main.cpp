@@ -127,10 +127,10 @@ void setup()
     }
     lcd.clear();
 
-    if (!bme.begin(__ADDR_I2C_BME280))
-    {
-        Serial.println("! BME init failed");
-    }
+    // if (!bme.begin(__ADDR_I2C_BME280))
+    // {
+    //     Serial.println("! BME init failed");
+    // }
 
     // Required
     if (!rtc.begin(__ADDR_I2C_AT24C32, __ADDR_I2C_DS3231))
@@ -140,6 +140,7 @@ void setup()
         changeLedForState();
         return;
     }
+    Serial.printf("RTC temp: %.1f\n", rtc.temperature());
     sdw.call(onSdwEvent);
     if (!sdw.begin(PIN_SD_CS, PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, true, SPI_FREQUENCY))
     {
@@ -183,7 +184,7 @@ void update(void)
     s.s = now.second();
     s.D = now.day();
     s.M = now.month();
-    s.t = bme.readTemperature();
+    s.t = rtc.temperature();
     s.sd_size = sdw.size();
     s.sd_used = sdw.used();
 }

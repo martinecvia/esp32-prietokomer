@@ -35,7 +35,6 @@ public:
     bool begin(uint8_t i2c_addr = 0x76, TwoWire &wire = Wire);
     bool ok(void) const { return _ok; }
 
-    bool measure(void);
     bool read(float &t_C, float &p_C, float &h_C);
 
     float readTemperature(void); // °C
@@ -50,4 +49,6 @@ private:
     Adafruit_BME280 _bme;
     bool _ok = false;
     float _t_Comp = 0.0f;
+
+    bool measure(void);
 };

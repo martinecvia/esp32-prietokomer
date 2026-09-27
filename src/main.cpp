@@ -16,7 +16,7 @@ Lcd<Adafruit_SSD1306> lcd(128, 32);
 Rtc rtc;
 Bme bme;
 Sdw sdw;
-Btn bt1, bt2, bt3;
+Btn bt1, bt2;
 
 enum class SystemState
 {
@@ -67,7 +67,7 @@ void changeLedForState(void)
 
 __lcd_display_state s;
 bool __led_is_working = false;
-uint32_t __led_millis = 0;
+uint32_t led_update = 0, lcd_update = 0, sdw_update = 0;
 
 void onSdwEvent(SdwEvent event)
 {
@@ -150,8 +150,7 @@ void setup()
     }
     Serial.printf("SDW file: name = %s, path = \n", sdw.filename().c_str(), sdw.filepath().c_str());
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
-    bt2.begin(PIN_BUTTON_2, BUTTON_DEBOUNCE_MS);
-    bt3.begin(PIN_BUTTON_3_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
+    bt2.begin(PIN_BUTTON_2_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
     state = SystemState::RUNNING;
     changeLedForState();
 }
@@ -214,14 +213,13 @@ void loop()
         return;
 
     // LED update
-    if (__led_is_working && millis() - __led_millis >= 100)
+    if (__led_is_working && millis() - led_update >= 100)
     {
         __led_is_working = false;
         changeLedForState();
     }
 
     // LCD update
-    static uint32_t lcd_update = 0;
     if (lcd.ok() &&
         millis() - lcd_update >= SSD1306_FREQUENCY)
     {
@@ -232,7 +230,6 @@ void loop()
     }
 
     // SDW update
-    static uint32_t sdw_update = 0;
     if (sdw_update == 0 || millis() - sdw_update >= 15000)
     {
         sdw_update = millis();
@@ -241,20 +238,19 @@ void loop()
     }
 
     // BTN
-    if (bt1.pressed() && state == SystemState::RUNNING)
+    if (bt1.pressed())
     {
         Serial.println("HWD button 1");
+        state = SystemState::PAUSED;
+        changeLedForState();
     }
-    if (bt2.pressed() && state == SystemState::RUNNING)
+
+    if (bt2.pressed())
     {
         Serial.println("HWD button 2");
-    }
-    if (bt3.pressed() && state == SystemState::RUNNING)
-    {
-        Serial.println("HWD button 3");
         led.Y();
         __led_is_working = true;
-        __led_millis = millis();
+        led_update = millis();
         s.pulseCount++;
     }
 }

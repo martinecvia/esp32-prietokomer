@@ -1,8 +1,8 @@
 #pragma once
 
 #include <Arduino.h>
-#include <Adafruit_SSD1306.h>
 
+#include <Adafruit_SSD1306.h>
 #include <Adafruit_SH110X.h>
 
 template <typename T>
@@ -85,8 +85,9 @@ public:
         bool is_i2c = (Wire.endTransmission() == 0);
         Serial.printf("LCD init result: is_i2c(0x%02X) = %d\n",
                       i2c_addr, is_i2c);
+        if (!is_i2c)
+            return false;
         _ok = LcdInitializer<T>::begin(_lcd, i2c_addr);
-
         if (_ok)
         {
             _lcd.clearDisplay();

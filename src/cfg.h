@@ -17,11 +17,10 @@
 #define __ADDR_I2C_BME280 0x76
 // Cyble NF-1
 #define PIN_CYBLE_NF1 4
-#define PIN_BUTTON_3_CYBLE_NF1 25
 #define CYBLE_NF1_DEBOUNCE_MS 15
 // Buttons
-#define PIN_BUTTON_1 34
-#define PIN_BUTTON_2 35
+#define PIN_BUTTON_1 35
+#define PIN_BUTTON_2_CYBLE_NF1 25
 #define BUTTON_DEBOUNCE_MS 30
 // LED
 #define PIN_LED_R 32

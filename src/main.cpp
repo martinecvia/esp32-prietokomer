@@ -8,6 +8,7 @@
 #include "modules/bme.h"
 #include "modules/sdw.h"
 #include "modules/sdw_test.h"
+using namespace sdw_test;
 #include "modules/btn.h"
 
 Led led;
@@ -19,6 +20,7 @@ Btn bt1, bt2, bt3;
 
 enum class SystemState
 {
+    NONE,
     IDLE,
     RUNNING,
     PAUSED,
@@ -42,7 +44,7 @@ struct __lcd_display_state
     float sd_size = 0.0f;
 };
 
-SystemState state = SystemState::IDLE;
+SystemState state = SystemState::NONE;
 void changeLedForState(void)
 {
     switch (state)
@@ -53,6 +55,7 @@ void changeLedForState(void)
     case SystemState::RUNNING:
         led.G();
         break;
+    case SystemState::NONE:
     case SystemState::IDLE:
     case SystemState::PAUSED:
         led.Y();
@@ -66,7 +69,8 @@ uint32_t __led_millis = 0;
 
 void onSdwEvent(SdwEvent event)
 {
-    using namespace sdw_test;
+    if (state == SystemState::NONE)
+        return;
     Serial.printf("SDW notify calls: %s\n", sdwEventName(event));
     switch (event)
     {
@@ -129,10 +133,10 @@ void setup()
     }
     lcd.clear();
 
-    // if (!bme.begin(__ADDR_I2C_BME280))
-    // {
-    //     Serial.println("! BME init failed");
-    // }
+    if (!bme.begin(__ADDR_I2C_BME280))
+    {
+        Serial.println("! BME init failed");
+    }
 
     // Required
     if (!rtc.begin(__ADDR_I2C_AT24C32, __ADDR_I2C_DS3231))
@@ -148,14 +152,14 @@ void setup()
                   now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
     sdw.onEvent(onSdwEvent);
     if (!sdw.begin(PIN_SD_CS, PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, true, SPI_FREQUENCY) ||
-        !sdwSelfTest(sdw, Serial, 1024))
+        !sdwSelfTest(sdw, Serial, 16))
     {
         Serial.println("! SDW init failed");
         state = SystemState::ERROR;
         changeLedForState();
         return;
     }
-
+    Serial.printf("SDW file: name = %s, path = \n", sdw.filename(), sdw.filepath());
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
     bt2.begin(PIN_BUTTON_2, BUTTON_DEBOUNCE_MS);
     bt3.begin(PIN_BUTTON_3_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
@@ -192,8 +196,8 @@ void update(void)
     s.D = now.day();
     s.M = now.month();
     s.t = rtc.temperature();
-    // s.sd_size = sdw.size();
-    // s.sd_used = sdw.used();
+    s.sd_size = sdw.size();
+    s.sd_used = sdw.used();
 }
 
 void render(void)
@@ -219,14 +223,16 @@ void render(void)
 
 void loop()
 {
+    if (state == SystemState::NONE)
+        return;
     update();
-    // if (bt1.pressed() && state == SystemState::RUNNING)
-    //     sdw.openNewFile("/test.txt");
-    // if (bt2.pressed() && state == SystemState::RUNNING)
-    //     Serial.println("HWD nbutton 2");
+    if (bt1.pressed() && state == SystemState::RUNNING)
+        sdw.openNewFile("/test.txt");
+    if (bt2.pressed() && state == SystemState::RUNNING)
+        Serial.println("HWD nbutton 2");
     if (bt3.pressed() && state == SystemState::RUNNING)
     {
-        Serial.println("HWD nbutton 3 (TEST)");
+        Serial.println("HWD button 3 (TEST)");
         led.Y();
         __led_is_working = true;
         __led_millis = millis();

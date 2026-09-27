@@ -432,3 +432,25 @@ bool Sdw::ok(void)
     emit(e);
     return ok;
 }
+
+String Sdw::filename(void)
+{
+    String f;
+    if (lock())
+    {
+        f = _filename;
+        release();
+    }
+    return f;
+}
+
+String Sdw::filepath(void)
+{
+    String f;
+    if (lock())
+    {
+        f = _filepath;
+        release();
+    }
+    return f;
+}

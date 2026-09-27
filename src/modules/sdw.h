@@ -37,6 +37,8 @@ public:
     bool ok(void);
 
     bool mounted() const { return _mounted; };
+    String filename(void);
+    String filepath(void);
 
     bool openNewFile(const String &filename);
     void close_file(void);

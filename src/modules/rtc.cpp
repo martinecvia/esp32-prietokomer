@@ -23,7 +23,7 @@ bool Rtc::begin(uint8_t i2c_addr, uint8_t rtc_addr,
     if (_lostPower)
     {
         Serial.println("! RTC lost energy");
-        //_rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
+        // _rtc.adjust(DateTime(F(__DATE__), F(__TIME__)));
     }
     return true;
 }
@@ -32,7 +32,7 @@ bool Rtc::now(DateTime &out)
 {
     if (!_ok)
     {
-        out = DateTime();
+        out = DateTime(time(nullptr));
         return false;
     }
     out = _rtc.now();
@@ -42,7 +42,7 @@ bool Rtc::now(DateTime &out)
 DateTime Rtc::now(void)
 {
     if (!_ok)
-        return DateTime();
+        return DateTime(time(nullptr));
     return _rtc.now();
 }
 
@@ -187,7 +187,7 @@ namespace
 
     bool ntpFetch(const char *host, uint32_t timeout, DateTime &out)
     {
-        out = DateTime();
+        out = DateTime(time(nullptr));
         IPAddress ip;
         if (!WiFi.hostByName(host, ip))
         {

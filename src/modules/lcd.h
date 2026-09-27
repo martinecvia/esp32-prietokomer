@@ -75,7 +75,12 @@ template <typename T>
 class Lcd
 {
 public:
-    Lcd(uint16_t width, uint16_t height) : _lcd(width, height, &Wire, -1) {}
+    Lcd(uint16_t w, uint16_t h) : _lcd(w, h, &Wire, -1)
+    {
+        _w = w;
+        _h = h;
+    }
+
     ~Lcd() = default;
 
     bool begin(uint8_t i2c_addr = 0x3C)
@@ -95,6 +100,7 @@ public:
             _lcd.setTextColor(1);
             _lcd.setTextSize(1);
             _lcd.display();
+            Serial.printf("LCD init result: %dx%d\n", _w, _h);
         }
         return _ok;
     }
@@ -128,8 +134,12 @@ public:
         _lcd.display();
     }
 
+    uint8_t w() const { return _w; }
+    uint8_t h() const { return _h; }
+
 private:
     uint8_t _i2c_addr;
     T _lcd;
+    uint8_t _w, _h;
     bool _ok = false;
 };

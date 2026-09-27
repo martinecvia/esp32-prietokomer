@@ -1,7 +1,11 @@
 #include <Wire.h>
 #include <Arduino.h>
 
+#include "btn.h"
 #include "cfg.h"
+#include "isr.h"
+#include "flow_meter.h"
+
 #include "modules/led.h"
 #include "modules/lcd.h"
 #include "modules/rtc.h"
@@ -9,7 +13,6 @@
 #include "modules/sdw.h"
 #include "modules/sdw_test.h"
 using namespace sdw_test;
-#include "modules/btn.h"
 
 Led led;
 Lcd<Adafruit_SSD1306> lcd(128, 32);
@@ -18,10 +21,12 @@ Bme bme;
 Sdw sdw;
 Btn bt1, bt2;
 
+Isr isr;
+FlowMeter flow(1.0f); // K = 1,
+
 enum class SystemState
 {
     NONE,
-    IDLE,
     RUNNING,
     PAUSED,
     ERROR
@@ -29,14 +34,16 @@ enum class SystemState
 
 struct __lcd_display_state
 {
-    // Emvironment
+    // Environment
     float t = 0.0f;
 
     // Clock
     uint8_t h = 0, m = 0, s = 0;
     uint8_t D = 0, M = 0;
 
-    float flow = 0.0f;
+    // FlowMeter
+    uint32_t get = 0;
+    float lpm = 0.0f;
     uint32_t pulseCount = 0;
 
     // SD
@@ -49,20 +56,29 @@ void changeLedForState(void)
 {
     switch (state)
     {
-    case SystemState::ERROR:
-        led.R();
+    case SystemState::NONE:
+        led.Y();
         break;
     case SystemState::RUNNING:
         led.G();
         break;
-    case SystemState::NONE:
-        led.Y();
-        break;
-    case SystemState::IDLE:
     case SystemState::PAUSED:
         led.set(0, 1, 1);
         break;
+    case SystemState::ERROR:
+        led.R();
+        break;
     }
+}
+
+void setState(SystemState s)
+{
+    state = s;
+    if (state == SystemState::RUNNING)
+        isr.allow();
+    else
+        isr.pause();
+    changeLedForState();
 }
 
 __lcd_display_state s;
@@ -85,8 +101,7 @@ void onSdwEvent(SdwEvent event)
     case SdwEvent::Error:
         if (state == SystemState::ERROR)
             return;
-        state = SystemState::ERROR;
-        changeLedForState();
+        setState(SystemState::ERROR);
         break;
     default:
         break;
@@ -149,20 +164,27 @@ void setup()
         !sdwSelfTest(sdw, Serial, 16))
     {
         Serial.println("! SDW init failed");
-        state = SystemState::ERROR;
-        changeLedForState();
+        setState(SystemState::ERROR);
         return;
     }
     Serial.printf("SDW file: name = %s, path = \n", sdw.filename().c_str(), sdw.filepath().c_str());
+
+    // ISR
+    if (!isr.begin(PIN_CYBLE_NF1, CYBLE_NF1_DEBOUNCE_MS, INPUT_PULLUP))
+    {
+        Serial.println("! ISR init failed");
+        setState(SystemState::ERROR);
+        return;
+    }
+
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
     bt2.begin(PIN_BUTTON_2_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
-    state = SystemState::RUNNING;
-    changeLedForState();
+    setState(SystemState::RUNNING);
 }
 
-static int __lcd_r(const char *t, uint8_t size)
+int __lcd_r(const char *t, uint8_t size)
 {
-    return 128 - (int)strlen(t) * 6 * size;
+    return lcd.w() - (int)strlen(t) * 6 * size;
 }
 
 static String __format_b(uint64_t size)
@@ -189,6 +211,9 @@ void update(void)
     s.D = now.day();
     s.M = now.month();
     s.t = rtc.temperature();
+
+    s.get = flow.get(now);
+    s.lpm = flow.lpm(now);
 }
 
 void render(void)
@@ -198,7 +223,7 @@ void render(void)
     char buf[24];
     lcd.clear();
 
-    snprintf(buf, sizeof(buf), "%.1f", s.flow);
+    snprintf(buf, sizeof(buf), "%lu|%.1f", s.get, s.lpm);
     lcd.print(buf, 0, 0, 3);
     snprintf(buf, sizeof(buf), "%02u:%02u:%02u", s.h, s.m, s.s);
     lcd.print(buf, __lcd_r(buf, 1), 0);
@@ -216,6 +241,25 @@ void loop()
 {
     if (state == SystemState::NONE)
         return;
+
+    if (isr.pending())
+    {
+        IsrEvent e;
+        DateTime dt = rtc.now();
+        while (isr.pop(e, dt))
+        {
+            flow.add(e.dt);
+            s.pulseCount++;
+            led.Y();
+            __led_is_working = true;
+            led_update = millis();
+            Serial.printf("ISR call: #%lu %02u:%02u:%02u - flow = %lu|%.1f l/m, unix = %lu\n",
+                          (unsigned long)s.pulseCount,
+                          e.dt.hour(), e.dt.minute(), e.dt.second(),
+                          flow.get(dt), flow.lpm(dt),
+                          (unsigned long)dt.unixtime());
+        }
+    }
 
     // LED update
     if (__led_is_working && millis() - led_update >= 100)
@@ -244,18 +288,10 @@ void loop()
 
     // BTN
     if (bt1.pressed())
-    {
-        Serial.println("HWD button 1");
-        state = SystemState::PAUSED;
-        changeLedForState();
-    }
-
+        if (state == SystemState::RUNNING)
+            setState(SystemState::PAUSED);
+        else if (state == SystemState::PAUSED)
+            setState(SystemState::RUNNING);
     if (bt2.pressed())
-    {
-        Serial.println("HWD button 2");
-        led.Y();
-        __led_is_working = true;
-        led_update = millis();
-        s.pulseCount++;
-    }
+        isr.pulse();
 }

@@ -43,7 +43,7 @@ public:
     }
 
 private:
-    uint8_t _pin = 0;
+    uint8_t _pin;
     bool _ok = false;
 
     bool _delayed = false;

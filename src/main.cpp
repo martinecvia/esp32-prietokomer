@@ -40,8 +40,8 @@ struct __lcd_display_state
     uint32_t pulseCount = 0;
 
     // SD
-    float sd_used = 0.0f;
-    float sd_size = 0.0f;
+    uint64_t sd_used = 0;
+    uint64_t sd_size = 0;
 };
 
 SystemState state = SystemState::NONE;
@@ -159,7 +159,7 @@ void setup()
         changeLedForState();
         return;
     }
-    Serial.printf("SDW file: name = %s, path = \n", sdw.filename(), sdw.filepath());
+    Serial.printf("SDW file: name = %s, path = \n", sdw.filename().c_str(), sdw.filepath().c_str());
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
     bt2.begin(PIN_BUTTON_2, BUTTON_DEBOUNCE_MS);
     bt3.begin(PIN_BUTTON_3_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
@@ -196,8 +196,6 @@ void update(void)
     s.D = now.day();
     s.M = now.month();
     s.t = rtc.temperature();
-    s.sd_size = sdw.size();
-    s.sd_used = sdw.used();
 }
 
 void render(void)
@@ -217,7 +215,7 @@ void render(void)
     lcd.print(buf, __lcd_r(buf, 1), 16);
     snprintf(buf, sizeof(buf), "#%lu", (unsigned long)s.pulseCount);
     lcd.print(buf, 0, 24);
-    snprintf(buf, sizeof(buf), "%s/%s", __format_b(s.sd_used), __format_b(s.sd_size));
+    snprintf(buf, sizeof(buf), "%s/%s", __format_b(s.sd_used).c_str(), __format_b(s.sd_size).c_str());
     lcd.print(buf, __lcd_r(buf, 1), 24);
 }
 
@@ -225,7 +223,6 @@ void loop()
 {
     if (state == SystemState::NONE)
         return;
-    update();
     if (bt1.pressed() && state == SystemState::RUNNING)
         sdw.openNewFile("/test.txt");
     if (bt2.pressed() && state == SystemState::RUNNING)
@@ -246,12 +243,22 @@ void loop()
         changeLedForState();
     }
 
-    // LCD update
-    static uint32_t display_ms = 0;
-    if (millis() - display_ms >= SSD1306_FREQUENCY)
+    // SDW update
+    static uint32_t sdw_update = 0;
+    if (sdw_update == 0 || millis() - sdw_update >= 15000)
     {
-        lcd.clear();
-        display_ms = millis();
+        sdw_update = millis();
+        s.sd_size = sdw.size();
+        s.sd_used = sdw.used();
+    }
+
+    // LCD update
+    static uint32_t lcd_update = 0;
+    if (lcd.ok() &&
+        millis() - lcd_update >= SSD1306_FREQUENCY)
+    {
+        lcd_update = millis();
+        update();
         render();
         lcd.refresh();
     }

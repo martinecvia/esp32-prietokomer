@@ -171,6 +171,7 @@ void setup()
         setState(SystemState::ERROR);
         return;
     }
+    makeNewFile(now);
     Serial.printf("SDW file: name = %s, path = \n", sdw.filename().c_str(), sdw.filepath().c_str());
 
     // ISR
@@ -185,6 +186,14 @@ void setup()
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
     bt2.begin(PIN_BUTTON_2_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
     setState(SystemState::RUNNING);
+}
+
+void makeNewFile(const DateTime &dt)
+{
+    char filename[32];
+    snprintf(filename, sizeof(filename), "/%04u%02u%02u_%02u%02u.csv",
+             dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute());
+    sdw.openNewFile(filename);
 }
 
 int __lcd_r(const char *t, uint8_t size)

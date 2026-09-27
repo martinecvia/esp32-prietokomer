@@ -1,20 +1,29 @@
 #pragma once
 
 #include <Arduino.h>
-#include <functional>
 #include "SPI.h"
 #include "SD.h"
+
+#include <functional>
+#include <freertos/FreeRTOS.h>
+#include <freertos/semphr.h>
 
 enum class SdwEvent : uint8_t
 {
     None = 0,
-    Error,
-    CardMounted,
-    CardRemoved,
-    FileOpened,
-    FileClosed,
-    WriteOk,
-    WriteError,
+    Error,            // Chyba
+    CardMounted,      // Karta byla načtena správně
+    CardRemoved,      // Karta přestala odpovídat
+    FileOpened,       // Soubor byl otevřen
+    FileClosed,       // Soubor byl zavřen
+    WriteOk,          // Řádek je fyzicky na kartě
+    WriteError,       // Přidání řádku selhalo
+    MountFailed,      // Pokus o připojení karty selhal
+    NotReady,         // Karta odpojená, čeká se na další pokus
+    FileHandleFailed, // Soubor nejde otevřít/vytvořit
+    NoFile,           // writeLine() bez předchozího openNewFile()
+    CardFull,         // Na kartě došlo místo
+    Busy              // Mutex se nepodařilo získat
 };
 
 using SdwEventCallback = std::function<void(SdwEvent)>;
@@ -24,54 +33,64 @@ class Sdw
 public:
     ~Sdw();
     bool begin(uint8_t csPin = 5, uint8_t clPin = -1, uint8_t soPin = -1, uint8_t siPin = -1,
-               bool useMutex = true, uint32_t freqHz = 4000000);
+               bool useMutex = true, uint32_t freqHz = 1000000);
     bool ok(void);
 
-    void flush_file();
-    uint64_t size_file(void);
-    void close_file();
-
     bool mounted() const { return _mounted; };
-    bool is_open() const { return _is_open; }
+
+    bool openNewFile(const String &filename);
+    void close_file(void);
 
     String cardType(void);
     uint64_t size(void);
+    uint64_t size_file(void);
     uint64_t used(void);
     float usedPercent(void);
     uint64_t free(void);
 
-    bool test(void);
-    void call(SdwEventCallback callback) { _callback = callback; }
+    void onEvent(SdwEventCallback callback) { _callback = callback; }
     SdwEvent last() const { return _last; }
-
-    void openNewFile(const String &filename);
 
     bool writeLine(const String &line);
     bool writeLine(const char *line);
 
-    void listDir(const char *dirPath = "/", bool recursive = true, Stream &out = Serial);
-    uint32_t countFiles(const char *dirPath = "/", bool recursive = true);
-
 private:
     uint8_t _csPin = 5, _clPin = -1, _soPin = -1, _siPin = -1;
-    uint32_t _freqHz = 4000000;
+    uint32_t _freqHz = 1000000;
 
-    bool _is_open = false;
+    static constexpr uint8_t MAX_EVENTS = 6;
+    struct Event
+    {
+        SdwEvent event[MAX_EVENTS];
+        uint8_t n = 0;
+        void add(SdwEvent _event)
+        {
+            if (n < MAX_EVENTS)
+                event[n++] = _event;
+        }
+    };
+
+    bool lock(uint32_t timeout = 5000); // neúspěšný mount může trvat i sekundy
+    void release(void);
+    void notify(SdwEvent event);
+    void emit(const Event &e);
+
+    bool ensureCardReady(Event &e);
+    void cardLost(Event &e);
+    void handleFailure(Event &e, SdwEvent event);
+    bool getSpace(Event &e, uint64_t &size, uint64_t &used);
+
+    SemaphoreHandle_t _mutex = nullptr;
+    bool _useMutex = true;
+    SdwEventCallback _callback;
+    SdwEvent _last = SdwEvent::None;
+
+    String _filename;
+    String _filepath;
+    bool _truncate = false;
+
     bool _mounted = false;
 
-    SdwEventCallback _callback = nullptr;
-    SdwEvent _last = SdwEvent::None;
-    void notify(SdwEvent event);
-
-    File _file;
-    String _filename;
-    bool _useMutex;
-    SemaphoreHandle_t _mutex = nullptr;
-
-    bool lock(uint32_t timeout = 1000);
-    void release(void);
-
-    bool ensureCardReady(void);
-    bool ensureFileOpenForWriting(void);
-    bool reopenFileForWriting(void);
+    uint32_t _retryAt = 0;
+    uint32_t _retryTo = 0;
 };

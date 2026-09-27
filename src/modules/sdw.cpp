@@ -1,11 +1,38 @@
 #include "sdw.h"
 
-Sdw::~Sdw()
+#include <sys/stat.h>
+
+#ifndef SDW_MOUNTPOINT
+#define SDW_MOUNTPOINT "/sd"
+#endif
+
+namespace
 {
-    close_file();
-    if (_mutex)
+    constexpr uint32_t RETRY_MIN_MS = 1000;
+    constexpr uint32_t RETRY_MAX_MS = 10000;
+    constexpr uint64_t xFULL_MARGIN = 64ULL * 1024ULL;
+
+    enum class FileOp : uint8_t
     {
-        vSemaphoreDelete(_mutex);
+        Ok,
+        OpenFailed,
+        WriteFailed
+    };
+
+    FileOp
+    writeFile(const char *path, const char *mode, const char *line)
+    {
+        FILE *f = fopen(path, mode);
+        if (!f)
+            return FileOp::OpenFailed;
+        bool ok = true;
+        if (line)
+            ok = fputs(line, f) >= 0 && fputs("\r\n", f) >= 0;
+        ok = ok && fflush(f) == 0;
+        ok = ok && fsync(fileno(f)) == 0;
+
+        ok = (fclose(f) == 0) && ok;
+        return ok ? FileOp::Ok : FileOp::WriteFailed;
     }
 }
 
@@ -16,10 +43,25 @@ bool Sdw::lock(uint32_t timeout)
     return xSemaphoreTake(_mutex, pdMS_TO_TICKS(timeout)) == pdTRUE;
 }
 
-void Sdw::release(void)
+void Sdw::release()
 {
     if (_useMutex && _mutex)
         xSemaphoreGive(_mutex);
+}
+
+Sdw::~Sdw()
+{
+    if (lock())
+    {
+        if (_mounted)
+        {
+            SD.end();
+            _mounted = false;
+        }
+        release();
+        if (_mutex)
+            vSemaphoreDelete(_mutex);
+    }
 }
 
 void Sdw::notify(SdwEvent event)
@@ -29,42 +71,40 @@ void Sdw::notify(SdwEvent event)
         _callback(event);
 }
 
-void Sdw::close_file(void)
+// Volat BEZ lock()
+void Sdw::emit(const Event &e)
 {
-    if (!lock())
-        return;
-    bool wasopen = _is_open;
-    if (_is_open)
-    {
-        _file.flush();
-        _file.close();
-        _is_open = false;
-    }
-    release();
-
-    if (wasopen)
-        notify(SdwEvent::FileClosed);
+    for (uint8_t i = 0; i < e.n; i++)
+        notify(e.event[i]);
 }
 
-void Sdw::flush_file(void)
-{
-    if (!lock())
-        return;
-    if (_is_open)
-    {
-        _file.flush();
-    }
-    release();
-}
-
-// Volat pod lockem
-bool Sdw::ensureCardReady(void)
+// Volat POD lock()
+bool Sdw::ensureCardReady(Event &e)
 {
     if (_mounted)
         return true;
+    if (_retryTo != 0 && (int32_t)(millis() - _retryAt) < 0)
+    {
+        e.add(SdwEvent::NotReady);
+        return false;
+    }
     SD.end();
-    SPI.begin(_clPin, _soPin, _siPin, _csPin);
-    _mounted = SD.begin(_csPin, SPI, _freqHz);
+    _mounted = SD.begin(_csPin, SPI, _freqHz, SDW_MOUNTPOINT);
+    if (_mounted)
+    {
+        _retryTo = 0;
+        e.add(SdwEvent::CardMounted);
+    }
+    else
+    {
+        uint32_t to = _retryTo * 2;
+        if (_retryTo == 0)
+            _retryTo = RETRY_MIN_MS;
+        else
+            _retryTo = (to > RETRY_MAX_MS) ? RETRY_MAX_MS : to;
+        _retryAt = millis() + _retryTo;
+        e.add(SdwEvent::MountFailed);
+    }
     return _mounted;
 }
 
@@ -82,80 +122,192 @@ bool Sdw::begin(uint8_t csPin, uint8_t clPin, uint8_t soPin, uint8_t siPin,
     if (_useMutex && !_mutex)
     {
         _mutex = xSemaphoreCreateMutex();
+        if (!_mutex)
+            notify(SdwEvent::Error);
     }
 
+    Event e;
     if (!lock())
+    {
+        notify(SdwEvent::Busy);
         return false;
-    _mounted = ensureCardReady();
+    }
+    pinMode(_csPin, OUTPUT);
+    digitalWrite(_csPin, HIGH);
+
+    SPI.begin(_clPin, _soPin, _siPin, _csPin);
+    _retryTo = 0;
+
+    bool mounted = ensureCardReady(e);
     release();
-
-    notify(_mounted ? SdwEvent::CardMounted : SdwEvent::Error);
-    return _mounted;
+    emit(e);
+    return mounted;
 }
 
-// Volat pod lockem
-bool Sdw::reopenFileForWriting(void)
+// Volat POD lock()
+void Sdw::cardLost(Event &e)
 {
-    if (_is_open)
-        return true;
-    if (_filename.length() == 0)
-        return false;
-    _file = SD.open(_filename, FILE_APPEND);
-    _is_open = (bool)_file;
-    return _is_open;
+    SD.end();
+    _mounted = false;
+    _retryTo = 0;
+    e.add(SdwEvent::CardRemoved);
 }
 
-// Volat pod lockem
-bool Sdw::ensureFileOpenForWriting(void)
+// Volat POD lock()
+void Sdw::handleFailure(Event &e, SdwEvent event)
 {
-    if (!ensureCardReady())
-        return false;
-    return reopenFileForWriting();
-}
-
-void Sdw::openNewFile(const String &filename)
-{
-    if (!lock())
+    uint64_t size = SD.totalBytes();
+    if (size == 0)
+    {
+        cardLost(e);
         return;
-    bool wasopen = _is_open;
-    if (_is_open)
-    {
-        _file.close();
-        _is_open = false;
     }
-
-    bool wasmntd = _mounted;
-    bool mounted = ensureCardReady();
-
-    bool is_open = false;
-    if (mounted)
-    {
-        _filename = filename;
-        if (SD.exists(_filename))
-        {
-            SD.remove(_filename);
-        }
-        _file = SD.open(_filename, FILE_WRITE);
-        is_open = (bool)_file;
-        _is_open = is_open;
-    }
-    release();
-
-    if (wasopen)
-        notify(SdwEvent::FileClosed);
-    if (mounted)
-        notify(is_open ? SdwEvent::FileOpened : SdwEvent::Error);
+    uint64_t used = SD.usedBytes();
+    if (used + xFULL_MARGIN >= size)
+        e.add(SdwEvent::CardFull);
     else
-        notify(wasmntd ? SdwEvent::CardRemoved : SdwEvent::Error);
+        e.add(event);
 }
 
-String Sdw::cardType(void)
+// Volat POD lock()
+bool Sdw::getSpace(Event &e, uint64_t &size, uint64_t &used)
+{
+    size = 0;
+    used = 0;
+    if (!ensureCardReady(e))
+        return false;
+    size = SD.totalBytes();
+    if (size == 0)
+    {
+        cardLost(e);
+        return false;
+    }
+    used = SD.usedBytes();
+    return true;
+}
+
+bool Sdw::openNewFile(const String &filename)
+{
+    Event e;
+    if (!lock())
+    {
+        e.add(SdwEvent::Busy);
+        e.add(SdwEvent::FileHandleFailed);
+        emit(e);
+        return false;
+    }
+
+    if (_filepath.length() > 0)
+        e.add(SdwEvent::FileClosed);
+    _filename = "";
+    _filepath = "";
+    _truncate = false;
+
+    bool ok = false;
+    if (filename.length() == 0)
+    {
+        e.add(SdwEvent::Error);
+    }
+    else
+    {
+        if (filename.startsWith("/"))
+            _filename = filename;
+        else
+            _filename = String("/") + filename;
+        _filepath = String(SDW_MOUNTPOINT) + _filename;
+        _truncate = true;
+
+        if (ensureCardReady(e))
+        {
+            FileOp f = writeFile(_filepath.c_str(), "w", nullptr);
+            ok = (f == FileOp::Ok);
+            if (ok)
+            {
+                _truncate = false;
+                e.add(SdwEvent::FileOpened);
+            }
+            else
+            {
+                handleFailure(e, SdwEvent::FileHandleFailed);
+            }
+        }
+    }
+    release();
+    emit(e);
+    return ok;
+}
+
+void Sdw::close_file(void)
 {
     if (!lock())
-        return "None";
-    bool mounted = ensureCardReady();
+    {
+        notify(SdwEvent::Busy);
+        return;
+    }
+
+    bool ok = _filepath.length() > 0;
+    _filename = "";
+    _filepath = "";
+    _truncate = false;
+
+    release();
+    if (ok)
+        notify(SdwEvent::FileClosed);
+}
+
+bool Sdw::writeLine(const String &line)
+{
+    return writeLine(line.c_str());
+}
+
+bool Sdw::writeLine(const char *line)
+{
+    Event e;
+    bool ok = false;
+    if (!lock())
+    {
+        e.add(SdwEvent::Busy);
+    }
+    else
+    {
+        if (_filepath.length() == 0)
+        {
+            e.add(SdwEvent::NoFile);
+        }
+        else if (ensureCardReady(e))
+        {
+            bool truncate = _truncate;
+            FileOp f = writeFile(_filepath.c_str(), truncate ? "w" : "a", line ? line : "");
+            ok = (f == FileOp::Ok);
+            if (ok && truncate)
+            {
+                _truncate = false;
+                e.add(SdwEvent::FileOpened);
+            }
+            else if (!ok)
+            {
+                handleFailure(e, f == FileOp::OpenFailed
+                                     ? SdwEvent::FileHandleFailed
+                                     : SdwEvent::Error);
+            }
+        }
+        release();
+    }
+    e.add(ok ? SdwEvent::WriteOk : SdwEvent::WriteError);
+    emit(e);
+    return ok;
+}
+
+String Sdw::cardType()
+{
+    Event e;
     String type = "None";
-    if (mounted)
+    if (!lock())
+    {
+        notify(SdwEvent::Busy);
+        return type;
+    }
+    if (ensureCardReady(e))
     {
         switch (SD.cardType())
         {
@@ -177,226 +329,106 @@ String Sdw::cardType(void)
         }
     }
     release();
+    emit(e);
     return type;
 }
 
 uint64_t Sdw::size(void)
 {
+    Event e;
+    uint64_t size = 0, used = 0;
     if (!lock())
+    {
+        notify(SdwEvent::Busy);
         return 0;
-    bool mounted = ensureCardReady();
-    uint64_t size = mounted ? SD.totalBytes() : 0;
+    }
+    getSpace(e, size, used);
     release();
+    emit(e);
     return size;
 }
 
 uint64_t Sdw::size_file(void)
 {
+    uint64_t sz = 0;
     if (!lock())
+    {
+        notify(SdwEvent::Busy);
         return 0;
-    uint64_t size = _is_open ? _file.size() : 0;
+    }
+    struct stat st;
+    if (_mounted && _filepath.length() > 0 && stat(_filepath.c_str(), &st) == 0)
+        sz = (uint64_t)st.st_size;
     release();
-    return size;
+    return sz;
 }
 
 uint64_t Sdw::used(void)
 {
+    Event e;
+    uint64_t size = 0, used = 0;
     if (!lock())
+    {
+        notify(SdwEvent::Busy);
         return 0;
-    bool mounted = ensureCardReady();
-    uint64_t size = mounted ? SD.usedBytes() : 0;
+    }
+    getSpace(e, size, used);
     release();
-    return size;
+    emit(e);
+    return used;
 }
 
 float Sdw::usedPercent(void)
 {
+    Event e;
+    uint64_t size = 0, used = 0;
     if (!lock())
-        return 0.0f;
-    bool mounted = ensureCardReady();
-    float percent = 0.0f;
-    if (mounted)
     {
-        uint64_t size_t = SD.totalBytes();
-        if (size_t > 0)
-        {
-            uint64_t size_u = SD.usedBytes();
-            percent = (float)((double)size_u * 100.0 / (double)size_t);
-        }
+        notify(SdwEvent::Busy);
+        return 0.0f;
     }
+    bool ok = getSpace(e, size, used);
     release();
-    return percent;
+    emit(e);
+    return ok ? (float)((double)used * 100.0 / (double)size) : 0.0f;
 }
 
 uint64_t Sdw::free(void)
 {
+    Event e;
+    uint64_t size = 0, used = 0;
     if (!lock())
-        return 0;
-    bool mounted = ensureCardReady();
-    uint64_t size = 0;
-    if (mounted)
     {
-        uint64_t size_t = SD.totalBytes();
-        uint64_t size_u = SD.usedBytes();
-        size = (size_t > size_u) ? (size_t - size_u) : 0;
-    }
-    release();
-    return size;
-}
-
-bool Sdw::test(void)
-{
-    if (!lock())
+        notify(SdwEvent::Busy);
         return 0;
-    bool mounted = ensureCardReady();
-    bool ok = false;
-    if (mounted)
-    {
-        File file = SD.open("/.sdiot", FILE_WRITE);
-        if (file)
-        {
-            size_t size = file.print(millis());
-            file.flush();
-            ok = (size > 0) && !file.getWriteError();
-            file.close();
-        }
     }
+    getSpace(e, size, used);
     release();
-    return ok;
+    emit(e);
+    return (size > used) ? (size - used) : 0;
 }
 
 bool Sdw::ok(void)
 {
-    bool mounted = _mounted;
-    bool ok = test();
-    if (ok && !mounted)
-        notify(SdwEvent::CardMounted);
-    else if (!ok)
-        notify(mounted ? SdwEvent::CardRemoved : SdwEvent::Error);
-    return ok;
-}
-
-namespace
-{
-    void print(File &entry, Stream &out, int depth)
-    {
-        for (int i = 0; i < depth; i++)
-            out.print("  ");
-        if (entry.isDirectory())
-        {
-            out.println(entry.name());
-        }
-        else
-        {
-            out.print(entry.name());
-            out.print("  (");
-            out.print(entry.size());
-            out.println(" B)");
-        }
-    }
-
-    // Volat pod lockem
-    uint32_t countFilesImpl(File dir, bool recursive)
-    {
-        uint32_t n = 0;
-        File entry = dir.openNextFile();
-        while (entry)
-        {
-            if (entry.isDirectory())
-            {
-                if (recursive)
-                    n += countFilesImpl(entry, recursive);
-            }
-            else
-                n++;
-            entry.close();
-            entry = dir.openNextFile();
-        }
-        return n;
-    }
-
-    void listDirImpl(File dir, bool recursive, Stream &out, int depth)
-    {
-        File entry = dir.openNextFile();
-        while (entry)
-        {
-            print(entry, out, depth);
-            if (entry.isDirectory() && recursive)
-            {
-                listDirImpl(entry, recursive, out, depth + 1);
-            }
-            entry.close();
-            entry = dir.openNextFile();
-        }
-    }
-}
-
-void Sdw::listDir(const char *dirPath, bool recursive, Stream &out)
-{
-    if (!lock())
-        return;
-    bool mounted = ensureCardReady();
-    bool is_open = false;
-    if (mounted)
-    {
-        File dir = SD.open(dirPath);
-        is_open = (bool)dir && dir.isDirectory();
-        if (is_open)
-        {
-            listDirImpl(dir, recursive, out, 0);
-            dir.rewindDirectory();
-        }
-        if (dir)
-            dir.close();
-    }
-    release();
-}
-
-uint32_t Sdw::countFiles(const char *dirPath, bool recursive)
-{
-    if (!lock())
-        return 0;
-    bool mounted = ensureCardReady();
-    uint32_t n = 0;
-    if (mounted)
-    {
-        File dir = SD.open(dirPath);
-        if (dir)
-        {
-            n = countFilesImpl(dir, recursive);
-            dir.close();
-        }
-    }
-    release();
-    return n;
-}
-
-bool Sdw::writeLine(const String &line)
-{
-    return writeLine(line.c_str());
-}
-
-bool Sdw::writeLine(const char *line)
-{
-    if (!lock())
-        return false;
-    bool mounted = _mounted;
-    bool is_open = ensureFileOpenForWriting();
+    Event e;
     bool ok = false;
-    if (is_open)
+    if (!lock())
     {
-        size_t size = _file.println(line);
-        ok = size > 0;
-        if (!ok)
-        {
-            _is_open = false;
-            _mounted = false;
-        }
+        e.add(SdwEvent::Busy);
     }
-    release();
-    if (!is_open)
-        notify(mounted ? SdwEvent::CardRemoved : SdwEvent::Error);
     else
-        notify(ok ? SdwEvent::WriteOk : SdwEvent::WriteError);
+    {
+        if (ensureCardReady(e))
+        {
+            char buf[16];
+            snprintf(buf, sizeof(buf), "%lu", (unsigned long)millis());
+            FileOp f = writeFile(SDW_MOUNTPOINT "/.sdiot", "w", buf);
+            ok = (f == FileOp::Ok);
+            if (!ok)
+                handleFailure(e, SdwEvent::Error);
+        }
+        release();
+    }
+    emit(e);
     return ok;
 }

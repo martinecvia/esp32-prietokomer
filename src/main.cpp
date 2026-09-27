@@ -7,6 +7,7 @@
 #include "modules/rtc.h"
 #include "modules/bme.h"
 #include "modules/sdw.h"
+#include "modules/sdw_test.h"
 #include "modules/btn.h"
 
 Led led;
@@ -65,7 +66,8 @@ uint32_t __led_millis = 0;
 
 void onSdwEvent(SdwEvent event)
 {
-    Serial.printf("SDW notify calls: %d\n", (int)event);
+    using namespace sdw_test;
+    Serial.printf("SDW notify calls: %s\n", sdwEventName(event));
     switch (event)
     {
     case SdwEvent::WriteOk:
@@ -84,7 +86,7 @@ void onSdwEvent(SdwEvent event)
         if (state == SystemState::ERROR)
             return;
         // capture - turn off
-        sdw.close_file();
+        // sdw.close_file();
         state = SystemState::ERROR;
         // wifi - turn off
         __led_is_working = false;
@@ -141,14 +143,19 @@ void setup()
         return;
     }
     Serial.printf("RTC temp: %.1f\n", rtc.temperature());
-    sdw.call(onSdwEvent);
-    if (!sdw.begin(PIN_SD_CS, PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, true, SPI_FREQUENCY))
+    DateTime now = rtc.now();
+    Serial.printf("RTC time: %02u:%02u:%02u %02u/%02u/%02u\n",
+                  now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
+    sdw.onEvent(onSdwEvent);
+    if (!sdw.begin(PIN_SD_CS, PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, true, SPI_FREQUENCY) ||
+        !sdwSelfTest(sdw, Serial, 1024))
     {
         Serial.println("! SDW init failed");
         state = SystemState::ERROR;
         changeLedForState();
         return;
     }
+
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
     bt2.begin(PIN_BUTTON_2, BUTTON_DEBOUNCE_MS);
     bt3.begin(PIN_BUTTON_3_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
@@ -185,8 +192,8 @@ void update(void)
     s.D = now.day();
     s.M = now.month();
     s.t = rtc.temperature();
-    s.sd_size = sdw.size();
-    s.sd_used = sdw.used();
+    // s.sd_size = sdw.size();
+    // s.sd_used = sdw.used();
 }
 
 void render(void)
@@ -213,10 +220,10 @@ void render(void)
 void loop()
 {
     update();
-    if (bt1.pressed() && state == SystemState::RUNNING)
-        sdw.openNewFile("/test.txt");
-    if (bt2.pressed() && state == SystemState::RUNNING)
-        Serial.println("HWD nbutton 2");
+    // if (bt1.pressed() && state == SystemState::RUNNING)
+    //     sdw.openNewFile("/test.txt");
+    // if (bt2.pressed() && state == SystemState::RUNNING)
+    //     Serial.println("HWD nbutton 2");
     if (bt3.pressed() && state == SystemState::RUNNING)
     {
         Serial.println("HWD nbutton 3 (TEST)");

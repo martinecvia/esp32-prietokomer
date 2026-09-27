@@ -5,6 +5,8 @@
 #include "cfg.h"
 #include "isr.h"
 #include "flow_meter.h"
+#include "flow_meter_test.h"
+using namespace flow_meter_test;
 
 #include "modules/led.h"
 #include "modules/lcd.h"
@@ -22,7 +24,9 @@ Sdw sdw;
 Btn bt1, bt2;
 
 Isr isr;
-FlowMeter flow(1.0f); // K = 1,
+FlowMeter flow(1.0f); // K = 1
+FlowMeterTest fmt([]
+                  { isr.pulse(); });
 
 enum class SystemState
 {
@@ -177,6 +181,7 @@ void setup()
         return;
     }
 
+    // fmt.test(12.0f);
     bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
     bt2.begin(PIN_BUTTON_2_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
     setState(SystemState::RUNNING);

@@ -60,7 +60,7 @@ public:
             if (c == 0)
                 continue;
             if (n >= 2 && age > 10)
-                break; // Mimo námi definované okno
+                break;
             n += c;
             sFirst = s;
             cFirst = c;
@@ -71,9 +71,7 @@ public:
 
         // avg()
         uint32_t span = sLast - sFirst;
-        float interval = (span == 0)
-                             ? 1.0f / (float)(n - 1)              // Všechno v jedné sekundě
-                             : (float)span / (float)(n - cFirst); // Pulzy za prvním / t
+        float interval = (float)span / (float)(n - cFirst);
 
         // Průtok kulminuje, takže hodnota klesá
         if (t0 >= 2 && (float)(t0 - 1) > interval)

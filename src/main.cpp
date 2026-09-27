@@ -56,9 +56,11 @@ void changeLedForState(void)
         led.G();
         break;
     case SystemState::NONE:
+        led.Y();
+        break;
     case SystemState::IDLE:
     case SystemState::PAUSED:
-        led.Y();
+        led.set(0, 1, 1);
         break;
     }
 }
@@ -75,25 +77,15 @@ void onSdwEvent(SdwEvent event)
     switch (event)
     {
     case SdwEvent::WriteOk:
-        led.off();
-        __led_is_working = true;
-        __led_millis = millis();
         break;
     case SdwEvent::FileOpened:
-        led.off();
-        __led_is_working = true;
-        __led_millis = millis();
         break;
     case SdwEvent::WriteError:
     case SdwEvent::CardRemoved:
     case SdwEvent::Error:
         if (state == SystemState::ERROR)
             return;
-        // capture - turn off
-        // sdw.close_file();
         state = SystemState::ERROR;
-        // wifi - turn off
-        __led_is_working = false;
         changeLedForState();
         break;
     default:
@@ -105,7 +97,7 @@ void setup()
 {
     Serial.begin(115200); // Serial
     delay(300);           // 0.3s delay
-
+    // LED
     Serial.println("\n\n\nsd_pulse_logger");
     if (!led.begin(PIN_LED_R, PIN_LED_Y, PIN_LED_G))
     {
@@ -220,33 +212,12 @@ void loop()
 {
     if (state == SystemState::NONE)
         return;
-    if (bt1.pressed() && state == SystemState::RUNNING)
-        sdw.openNewFile("/test.txt");
-    if (bt2.pressed() && state == SystemState::RUNNING)
-        Serial.println("HWD nbutton 2");
-    if (bt3.pressed() && state == SystemState::RUNNING)
-    {
-        Serial.println("HWD button 3 (TEST)");
-        led.Y();
-        __led_is_working = true;
-        __led_millis = millis();
-        s.pulseCount++;
-    }
 
     // LED update
     if (__led_is_working && millis() - __led_millis >= 100)
     {
         __led_is_working = false;
         changeLedForState();
-    }
-
-    // SDW update
-    static uint32_t sdw_update = 0;
-    if (sdw_update == 0 || millis() - sdw_update >= 15000)
-    {
-        sdw_update = millis();
-        s.sd_size = sdw.size();
-        s.sd_used = sdw.used();
     }
 
     // LCD update
@@ -258,5 +229,32 @@ void loop()
         update();
         render();
         lcd.refresh();
+    }
+
+    // SDW update
+    static uint32_t sdw_update = 0;
+    if (sdw_update == 0 || millis() - sdw_update >= 15000)
+    {
+        sdw_update = millis();
+        s.sd_size = sdw.size();
+        s.sd_used = sdw.used();
+    }
+
+    // BTN
+    if (bt1.pressed() && state == SystemState::RUNNING)
+    {
+        Serial.println("HWD button 1");
+    }
+    if (bt2.pressed() && state == SystemState::RUNNING)
+    {
+        Serial.println("HWD button 2");
+    }
+    if (bt3.pressed() && state == SystemState::RUNNING)
+    {
+        Serial.println("HWD button 3");
+        led.Y();
+        __led_is_working = true;
+        __led_millis = millis();
+        s.pulseCount++;
     }
 }

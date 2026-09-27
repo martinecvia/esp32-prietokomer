@@ -50,6 +50,7 @@ public:
     float temperature(void);
 
     bool adjust(const DateTime &dt);
+    bool adjust(const char *ssid, const char *pass, uint32_t timeout = 5000);
 
 private:
     uint8_t _i2c_addr,

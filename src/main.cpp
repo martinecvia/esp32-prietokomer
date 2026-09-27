@@ -95,6 +95,8 @@ void onSdwEvent(SdwEvent event)
 
 void setup()
 {
+    setenv("TZ", "CET-1CEST,M3.5.0,M10.5.0/3", 1);
+    tzset();
     Serial.begin(115200); // Serial
     delay(300);           // 0.3s delay
     // LED
@@ -135,6 +137,9 @@ void setup()
         Serial.println("! RTC init failed");
     }
     Serial.printf("RTC temp: %.1f\n", rtc.temperature());
+    // RTC NTP Magic
+    if (rtc.lostPower())
+        rtc.adjust(WIFI_AP_SSID, WIFI_AP_PASSWORD, 5000);
     DateTime now = rtc.now();
     Serial.printf("RTC time: %02u:%02u:%02u %02u/%02u/%02u\n",
                   now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());

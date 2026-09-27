@@ -138,18 +138,15 @@ void setup()
         Serial.println("! BME init failed");
     }
 
-    // Required
     if (!rtc.begin(__ADDR_I2C_AT24C32, __ADDR_I2C_DS3231))
     {
         Serial.println("! RTC init failed");
-        state = SystemState::ERROR;
-        changeLedForState();
-        return;
     }
     Serial.printf("RTC temp: %.1f\n", rtc.temperature());
     DateTime now = rtc.now();
     Serial.printf("RTC time: %02u:%02u:%02u %02u/%02u/%02u\n",
                   now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
+
     sdw.onEvent(onSdwEvent);
     if (!sdw.begin(PIN_SD_CS, PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, true, SPI_FREQUENCY) ||
         !sdwSelfTest(sdw, Serial, 16))

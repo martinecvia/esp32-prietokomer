@@ -33,13 +33,13 @@ public:
     void clear(void);
 
     void pulse(void);
-    bool pop(IsrEvent &event, const DateTime &now);
+    bool pop(IsrEvent &event, const DateTime &dt);
 
     uint32_t pending(void);
     IsrStats stats(void);
 
 private:
-    uint8_t _pin = 0xFF;
+    uint8_t _pin;
     int64_t _debounceUs = 15000, _lastDebounceUs = 0;
     bool _ok = false;
 

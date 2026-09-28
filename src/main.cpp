@@ -7,6 +7,7 @@
 #include "flow_meter.h"
 #include "flow_meter_test.h"
 using namespace flow_meter_test;
+#include "web.h"
 
 #include "modules/led.h"
 #include "modules/lcd.h"
@@ -17,7 +18,7 @@ using namespace flow_meter_test;
 using namespace sdw_test;
 
 Led led;
-Lcd<Adafruit_SSD1306> lcd(128, 32);
+Lcd<Adafruit_SH1106G> lcd(128, 64);
 Rtc rtc;
 Bme bme;
 Sdw sdw;
@@ -27,6 +28,9 @@ Isr isr;
 FlowMeter flow(1.0f); // K = 1
 FlowMeterTest fmt([]
                   { isr.pulse(); });
+uint32_t pulseDelta = UINT32_MAX;
+
+Web web;
 
 enum class SystemState
 {
@@ -77,6 +81,8 @@ void changeLedForState(void)
 
 void setState(SystemState s)
 {
+    if (s == state)
+        return;
     state = s;
     if (state == SystemState::RUNNING)
         isr.allow();
@@ -88,6 +94,17 @@ void setState(SystemState s)
 __lcd_display_state s;
 bool __led_is_working = false;
 uint32_t led_update = 0, lcd_update = 0, sdw_update = 0;
+
+void makeNewFile(const DateTime &dt)
+{
+    char filename[32];
+    snprintf(filename, sizeof(filename), "/flowrate_%04u-%02u-%02u_%02u-%02u.csv",
+             dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
+    if (!sdw.openNewFile(filename))
+        return;
+    sdw.writeLine("Date_time_Impulse;Impulse;T_Diferences_T_sec;Total_Volume_l;Flow_rate;Average_FR_per_min;Temperature;Rtc_Flag");
+    Serial.printf("SDW file: path = %s\n", sdw.filepath().c_str());
+}
 
 void onSdwEvent(SdwEvent event)
 {
@@ -106,6 +123,11 @@ void onSdwEvent(SdwEvent event)
         if (state == SystemState::ERROR)
             return;
         setState(SystemState::ERROR);
+        break;
+    case SdwEvent::CardMounted:
+        if (sdw.filename().length() == 0)
+            makeNewFile(rtc.now());
+        setState(SystemState::RUNNING);
         break;
     default:
         break;
@@ -163,6 +185,12 @@ void setup()
     Serial.printf("RTC time: %02u:%02u:%02u %02u/%02u/%02u\n",
                   now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());
 
+    web.begin(sdw, WIFI_AP_SSID, WIFI_AP_PASSWORD);
+    isr.begin(PIN_CYBLE_NF1, CYBLE_NF1_DEBOUNCE_MS, INPUT_PULLUP);
+    bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
+    bt2.begin(PIN_BUTTON_2_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
+
+    // SDW
     sdw.onEvent(onSdwEvent);
     if (!sdw.begin(PIN_SD_CS, PIN_SD_SCK, PIN_SD_MISO, PIN_SD_MOSI, true, SPI_FREQUENCY) ||
         !sdwSelfTest(sdw, Serial, 16))
@@ -172,28 +200,7 @@ void setup()
         return;
     }
     makeNewFile(now);
-    Serial.printf("SDW file: name = %s, path = \n", sdw.filename().c_str(), sdw.filepath().c_str());
-
-    // ISR
-    if (!isr.begin(PIN_CYBLE_NF1, CYBLE_NF1_DEBOUNCE_MS, INPUT_PULLUP))
-    {
-        Serial.println("! ISR init failed");
-        setState(SystemState::ERROR);
-        return;
-    }
-
-    // fmt.test(12.0f);
-    bt1.begin(PIN_BUTTON_1, BUTTON_DEBOUNCE_MS);
-    bt2.begin(PIN_BUTTON_2_CYBLE_NF1, BUTTON_DEBOUNCE_MS);
     setState(SystemState::RUNNING);
-}
-
-void makeNewFile(const DateTime &dt)
-{
-    char filename[32];
-    snprintf(filename, sizeof(filename), "/%04u%02u%02u_%02u%02u.csv",
-             dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute());
-    sdw.openNewFile(filename);
 }
 
 int __lcd_r(const char *t, uint8_t size)
@@ -237,11 +244,21 @@ void render(void)
     char buf[24];
     lcd.clear();
 
-    snprintf(buf, sizeof(buf), "%lu|%.1f", s.get, s.lpm);
-    lcd.print(buf, 0, 0, 3);
+    if (web.is_serving())
+    {
+        snprintf(buf, sizeof(buf), "ssid: %s", web.ssid());
+        lcd.print(buf, 0, 0);
+        snprintf(buf, sizeof(buf), "pass: %s", web.pass());
+        lcd.print(buf, 0, 8);
+        snprintf(buf, sizeof(buf), "http://%s/", web.ip().toString().c_str());
+        lcd.print(buf, 0, 16);
+        return;
+    }
+    snprintf(buf, sizeof(buf), "%.1f", s.lpm);
+    lcd.print(buf, 0, 0, 2);
     snprintf(buf, sizeof(buf), "%02u:%02u:%02u", s.h, s.m, s.s);
     lcd.print(buf, __lcd_r(buf, 1), 0);
-    snprintf(buf, sizeof(buf), "%02u/%02u", s.D, s.M);
+    snprintf(buf, sizeof(buf), "%02u.%02u", s.D, s.M);
     lcd.print(buf, __lcd_r(buf, 1), 8);
     snprintf(buf, sizeof(buf), "%.1fC", s.t);
     lcd.print(buf, __lcd_r(buf, 1), 16);
@@ -255,23 +272,29 @@ void loop()
 {
     if (state == SystemState::NONE)
         return;
-
     if (isr.pending())
     {
         IsrEvent e;
-        DateTime dt = rtc.now();
-        while (isr.pop(e, dt))
+        while (isr.pop(e, rtc.now()))
         {
+            uint32_t t0 = flow.since(e.dt);
             flow.add(e.dt);
             s.pulseCount++;
+
+            char line[64];
+            // "Date_time_Impulse;Impulse;T_Diferences_T_sec;Total_Volume_l;Flow_rate;Flow_rate_exp;Temperature;Rtc_Flag"
+            snprintf(line, sizeof(line),
+                     "%02u.%02u.%04u %02u:%02u:%02u;%lu;%lu;%lu;%lu;%.1f;%.1f;%lu",
+                     e.dt.day(), e.dt.month(), e.dt.year(), e.dt.hour(), e.dt.minute(), e.dt.second(),
+                     (int)1, (unsigned long)t0,
+                     (unsigned long)s.pulseCount, (unsigned long)flow.get(e.dt), flow.lpm(e.dt),
+                     rtc.temperature(), (int)rtc.lostPower());
+            sdw.writeLine(line);
+
             led.Y();
             __led_is_working = true;
             led_update = millis();
-            Serial.printf("ISR call: #%lu %02u:%02u:%02u - flow = %lu|%.1f l/m, unix = %lu\n",
-                          (unsigned long)s.pulseCount,
-                          e.dt.hour(), e.dt.minute(), e.dt.second(),
-                          flow.get(dt), flow.lpm(dt),
-                          (unsigned long)dt.unixtime());
+            Serial.printf("ISR call: %s\n", line);
         }
     }
 
@@ -299,6 +322,16 @@ void loop()
         s.sd_size = sdw.size();
         s.sd_used = sdw.used();
     }
+
+    // WEB
+    web.loop();
+    if (state == SystemState::PAUSED && !web.is_serving())
+        if (web.start())
+            Serial.printf("WEB conn: %s >> http://%s/\n", web.ssid(), web.ip().toString().c_str());
+        else
+            Serial.println("! WEB conn failed");
+    else if (state != SystemState::PAUSED && web.is_serving())
+        web.pause();
 
     // BTN
     if (bt1.pressed())

@@ -56,7 +56,7 @@ void Isr::pulse(void)
     portEXIT_CRITICAL(&_mux);
 }
 
-bool Isr::pop(IsrEvent &event, const DateTime &now)
+bool Isr::pop(IsrEvent &event, const DateTime &dt)
 {
     if (!_ok)
         return false;
@@ -69,7 +69,7 @@ bool Isr::pop(IsrEvent &event, const DateTime &now)
     }
     portEXIT_CRITICAL(&_mux);
     if (ok)
-        event.dt = now;
+        event.dt = dt;
     return ok;
 }
 

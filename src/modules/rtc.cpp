@@ -19,6 +19,7 @@ bool Rtc::begin(uint8_t i2c_addr, uint8_t rtc_addr,
     _ok = _rtc.begin(&wire);
     if (!_ok)
         return false;
+    _rtc.disable32K();
     _lostPower = _rtc.lostPower();
     if (_lostPower)
     {
@@ -28,15 +29,15 @@ bool Rtc::begin(uint8_t i2c_addr, uint8_t rtc_addr,
     return true;
 }
 
-bool Rtc::now(DateTime &out)
+bool Rtc::now(DateTime &dt)
 {
     if (!_ok)
     {
-        out = DateTime(time(nullptr));
+        dt = DateTime(time(nullptr));
         return false;
     }
-    out = _rtc.now();
-    return out.isValid();
+    dt = _rtc.now();
+    return dt.isValid();
 }
 
 DateTime Rtc::now(void)

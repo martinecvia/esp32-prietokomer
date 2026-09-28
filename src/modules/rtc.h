@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <RTClib.h>
 
+#include <esp_timer.h>
+
 /*
 https://dratek.cz/arduino-platforma/1261-rtc-hodiny-realneho-casu-ds3231-at24c32-iic-pametovy-modul-pro-arduino.html
 https://navody.dratek.cz/navody-k-produktum/rtc-hodiny-realneho-casu-ds3231-at24c32-pametovy-modul.html
@@ -45,12 +47,14 @@ public:
     bool ok(void) const { return _ok; }
     bool lostPower(void) const { return _lostPower; }
 
-    bool now(DateTime &out);
-    DateTime now(void);
     float temperature(void);
 
     bool adjust(const DateTime &dt);
     bool adjust(const char *ssid, const char *pass, uint32_t timeout = 5000);
+
+    // Converters
+    bool now(DateTime &dt);
+    DateTime now(void);
 
 private:
     uint8_t _i2c_addr,

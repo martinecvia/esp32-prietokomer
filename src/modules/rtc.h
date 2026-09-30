@@ -5,6 +5,8 @@
 
 #include <esp_timer.h>
 
+#include <Wire.h>
+
 /*
 https://dratek.cz/arduino-platforma/1261-rtc-hodiny-realneho-casu-ds3231-at24c32-iic-pametovy-modul-pro-arduino.html
 https://navody.dratek.cz/navody-k-produktum/rtc-hodiny-realneho-casu-ds3231-at24c32-pametovy-modul.html

@@ -7,6 +7,8 @@
 
 #include <Adafruit_GFX.h>
 
+#include <Wire.h>
+
 template <typename T>
 struct LcdInitializer
 {

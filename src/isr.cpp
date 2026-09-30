@@ -1,9 +1,5 @@
 #include "isr.h"
 
-#ifndef IRAM_ATTR
-#define IRAM_ATTR
-#endif
-
 void Isr::clear(void)
 {
     portENTER_CRITICAL(&_mux);

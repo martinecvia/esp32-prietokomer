@@ -8,6 +8,10 @@
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
+#ifndef SDW_MOUNTPOINT
+#define SDW_MOUNTPOINT "/sd"
+#endif
+
 enum class SdwEvent : uint8_t
 {
     None = 0,

@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <esp_timer.h>
 
+#include <RTClib.h>
+
 class FlowMeter
 {
 public:

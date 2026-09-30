@@ -3,6 +3,8 @@
 #include <Arduino.h>
 #include <Adafruit_BME280.h>
 
+#include <Wire.h>
+
 /*
 Specifikace:
 Napájecí napětí: 1,8 - 5V DC

@@ -8,7 +8,7 @@
 
 namespace sdw_test
 {
-    const char *sdwEventName(SdwEvent event)
+    inline const char *sdwEventName(SdwEvent event)
     {
         switch (event)
         {

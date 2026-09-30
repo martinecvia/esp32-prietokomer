@@ -2,10 +2,6 @@
 
 #include <sys/stat.h>
 
-#ifndef SDW_MOUNTPOINT
-#define SDW_MOUNTPOINT "/sd"
-#endif
-
 namespace
 {
     constexpr uint32_t RETRY_MIN_MS = 1000;

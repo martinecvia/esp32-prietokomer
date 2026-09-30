@@ -83,23 +83,24 @@ namespace rtc_wifi
     }
 
     bool connect(const char *ssid, const char *pass,
-                 uint32_t timeoutMs = 5000)
+                 uint32_t timeout = 5000)
     {
-        WiFi.mode(WIFI_STA);
-        WiFi.setAutoReconnect(false);
         WiFi.persistent(false);
-        if (!is_ssid_avaliable(ssid))
-        {
-            Serial.printf("! RTC wifi: '%s' not found\n", ssid);
-            return false;
-        }
+        WiFi.setAutoReconnect(false);
+        WiFi.mode(WIFI_STA);
+        delay(50);
         Serial.printf("RTC wifi: connecting to '%s'\n", ssid);
         WiFi.begin(ssid, pass);
         uint32_t t0 = millis();
-        while (WiFi.status() != WL_CONNECTED & millis() - t0 < timeoutMs)
+        wl_status_t wl;
+        while ((wl = WiFi.status()) != WL_CONNECTED && millis() - t0 < timeout)
         {
+            if (wl == WL_NO_SSID_AVAIL)
+            {
+                Serial.printf("! RTC wifi: '%s' not found\n", ssid);
+                return false;
+            }
             delay(100);
-            Serial.print('.');
         }
         Serial.println();
         if (WiFi.status() != WL_CONNECTED)

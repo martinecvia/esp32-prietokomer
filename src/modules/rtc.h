@@ -42,7 +42,7 @@ public:
 
     Rtc(const Rtc &) = delete;
     Rtc &operator=(const Rtc &) = delete;
-    bool begin(uint8_t i2c_addr = 0x57, uint8_t rtc_addr = 0x68,
+    bool begin(const uint8_t i2c_addr = 0x57, const uint8_t rtc_addr = 0x68,
                TwoWire &wire = Wire);
     bool ok(void) const { return _ok; }
     bool lostPower(void) const { return _lostPower; }

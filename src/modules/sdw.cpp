@@ -10,12 +10,11 @@ namespace
 {
     constexpr uint32_t RETRY_MIN_MS = 1000;
     constexpr uint32_t RETRY_MAX_MS = 10000;
-    constexpr uint64_t xFULL_MARGIN = 64ULL * 1024ULL;
 
     enum class FileOp : uint8_t
     {
-        Ok,
-        OpenFailed,
+        WriteOk,
+        FileHandleFailed,
         WriteFailed
     };
 
@@ -24,7 +23,7 @@ namespace
     {
         FILE *f = fopen(path, mode);
         if (!f)
-            return FileOp::OpenFailed;
+            return FileOp::FileHandleFailed;
         bool ok = true;
         if (line)
             ok = fputs(line, f) >= 0 && fputs("\r\n", f) >= 0;
@@ -32,7 +31,7 @@ namespace
         ok = ok && fsync(fileno(f)) == 0;
 
         ok = (fclose(f) == 0) && ok;
-        return ok ? FileOp::Ok : FileOp::WriteFailed;
+        return ok ? FileOp::WriteOk : FileOp::WriteFailed;
     }
 }
 
@@ -163,7 +162,7 @@ void Sdw::handleFailure(Event &e, SdwEvent event)
         return;
     }
     uint64_t used = SD.usedBytes();
-    if (used + xFULL_MARGIN >= size)
+    if (used + 64ULL * 1024ULL >= size)
         e.add(SdwEvent::CardFull);
     else
         e.add(event);
@@ -220,7 +219,7 @@ bool Sdw::openNewFile(const String &filename)
         if (ensureCardReady(e))
         {
             FileOp f = writeFile(_filepath.c_str(), "w", nullptr);
-            ok = (f == FileOp::Ok);
+            ok = (f == FileOp::WriteOk);
             if (ok)
             {
                 _truncate = false;
@@ -278,7 +277,7 @@ bool Sdw::writeLine(const char *line)
         {
             bool truncate = _truncate;
             FileOp f = writeFile(_filepath.c_str(), truncate ? "w" : "a", line ? line : "");
-            ok = (f == FileOp::Ok);
+            ok = (f == FileOp::WriteOk);
             if (ok && truncate)
             {
                 _truncate = false;
@@ -286,7 +285,7 @@ bool Sdw::writeLine(const char *line)
             }
             else if (!ok)
             {
-                handleFailure(e, f == FileOp::OpenFailed
+                handleFailure(e, f == FileOp::FileHandleFailed
                                      ? SdwEvent::FileHandleFailed
                                      : SdwEvent::Error);
             }
@@ -423,7 +422,7 @@ bool Sdw::ok(void)
             char buf[16];
             snprintf(buf, sizeof(buf), "%lu", (unsigned long)millis());
             FileOp f = writeFile(SDW_MOUNTPOINT "/.sdiot", "w", buf);
-            ok = (f == FileOp::Ok);
+            ok = (f == FileOp::WriteOk);
             if (!ok)
                 handleFailure(e, SdwEvent::Error);
         }

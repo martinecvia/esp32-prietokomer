@@ -16,14 +16,14 @@ enum class SdwEvent : uint8_t
     CardRemoved,      // Karta přestala odpovídat
     FileOpened,       // Soubor byl otevřen
     FileClosed,       // Soubor byl zavřen
-    WriteOk,          // Řádek je fyzicky na kartě
-    WriteError,       // Přidání řádku selhalo
+    WriteOk,          // Zápis OK
+    WriteError,       // Zápis selhal
     MountFailed,      // Pokus o připojení karty selhal
     NotReady,         // Karta odpojená, čeká se na další pokus
     FileHandleFailed, // Soubor nejde otevřít/vytvořit
     NoFile,           // writeLine() bez předchozího openNewFile()
     CardFull,         // Na kartě došlo místo
-    Busy              // Mutex se nepodařilo získat
+    Busy              // Mutex se nepovedlo získat
 };
 
 using SdwEventCallback = std::function<void(SdwEvent)>;
@@ -32,8 +32,8 @@ class Sdw
 {
 public:
     ~Sdw();
-    bool begin(uint8_t csPin = 5, uint8_t clPin = -1, uint8_t soPin = -1, uint8_t siPin = -1,
-               bool useMutex = true, uint32_t freqHz = 1000000);
+    bool begin(const uint8_t csPin = 5, const uint8_t clPin = -1, const uint8_t soPin = -1, const uint8_t siPin = -1,
+               const bool useMutex = true, const uint32_t freqHz = 1000000);
     bool ok(void);
 
     bool mounted() const { return _mounted; };
@@ -72,7 +72,7 @@ private:
         }
     };
 
-    bool lock(uint32_t timeout = 5000); // neúspěšný mount může trvat i sekundy
+    bool lock(uint32_t timeout = 5000);
     void release(void);
     void notify(SdwEvent event);
     void emit(const Event &e);

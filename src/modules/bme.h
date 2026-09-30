@@ -32,7 +32,7 @@ public:
     Bme(const Bme &) = delete;
     Bme &operator=(const Bme &) = delete;
 
-    bool begin(uint8_t i2c_addr = 0x76, TwoWire &wire = Wire);
+    bool begin(const uint8_t i2c_addr = 0x76, TwoWire &wire = Wire);
     bool ok(void) const { return _ok; }
 
     bool read(float &t_C, float &p_C, float &h_C);

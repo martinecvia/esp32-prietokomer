@@ -5,6 +5,8 @@
 #include <Adafruit_SSD1306.h>
 #include <Adafruit_SH110X.h>
 
+#include <Adafruit_GFX.h>
+
 template <typename T>
 struct LcdInitializer
 {
@@ -83,7 +85,7 @@ public:
 
     ~Lcd() = default;
 
-    bool begin(uint8_t i2c_addr = 0x3C)
+    bool begin(const uint8_t i2c_addr = 0x3C)
     {
         _i2c_addr = i2c_addr;
         Wire.beginTransmission(i2c_addr);
@@ -124,6 +126,13 @@ public:
         _lcd.setTextSize(size);
         _lcd.setCursor(x, y);
         _lcd.print(text);
+    }
+
+    void setFont(const GFXfont *f)
+    {
+        if (!_ok)
+            return;
+        _lcd.setFont(f);
     }
 
     void refresh(void)

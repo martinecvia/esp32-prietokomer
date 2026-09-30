@@ -9,6 +9,7 @@
 using namespace flow_meter_test;
 #include "web.h"
 
+#include "modules/mem.h"
 #include "modules/led.h"
 #include "modules/lcd.h"
 #include "modules/rtc.h"
@@ -17,6 +18,7 @@ using namespace flow_meter_test;
 #include "modules/sdw_test.h"
 using namespace sdw_test;
 
+Mem mem;
 Led led;
 Lcd<Adafruit_SH1106G> lcd(128, 64);
 Rtc rtc;
@@ -179,8 +181,14 @@ void setup()
     }
     Serial.printf("RTC temp: %.1f\n", rtc.temperature());
     // RTC NTP Magic
-    if (rtc.lostPower())
+    if (esp_reset_reason() == ESP_RST_BROWNOUT)
+    {
+        Serial.println("! ESP reset: Last was brownout, skipping WiFi/NTP");
+    }
+    else if (rtc.lostPower())
+    {
         rtc.adjust(WIFI_AP_SSID, WIFI_AP_PASSWORD, 5000);
+    }
     DateTime now = rtc.now();
     Serial.printf("RTC time: %02u:%02u:%02u %02u/%02u/%02u\n",
                   now.hour(), now.minute(), now.second(), now.day(), now.month(), now.year());

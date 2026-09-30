@@ -15,7 +15,7 @@ class Led
 {
 public:
     ~Led();
-    bool begin(uint8_t pin_r, uint8_t pin_y, uint8_t pin_g);
+    bool begin(const uint8_t pin_r, const uint8_t pin_y, const uint8_t pin_g);
     bool ok(void) const { return _ok; }
 
     void set(bool r, bool y, bool g);

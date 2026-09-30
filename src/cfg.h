@@ -13,6 +13,7 @@
 #define __ADDR_I2C_AT24C32 0x57
 #define __ADDR_I2C_DS3231 0x68
 #define __ADDR_I2C_SSD1306 0x3C
+#define __ADDR_I2C_24LC01 0x50
 #define SSD1306_FREQUENCY 100
 #define __ADDR_I2C_BME280 0x76
 // Cyble NF-1

@@ -9,6 +9,11 @@ bool Bme::begin(uint8_t i2c_addr, TwoWire &wire)
     bool is_i2c = (wire.endTransmission() == 0);
     Serial.printf("BME init result: is_i2c(0x%02X) = %d\n",
                   i2c_addr, is_i2c);
+    if (!is_i2c)
+    {
+        _ok = false;
+        return false;
+    }
     _ok = _bme.begin(i2c_addr, &wire);
     if (!_ok)
         return false;
@@ -24,10 +29,7 @@ bool Bme::begin(uint8_t i2c_addr, TwoWire &wire)
 
 bool Bme::measure()
 {
-    if (!_ok)
-        return false;
-    (void)_bme.takeForcedMeasurement();
-    return true;
+    return _ok && _bme.takeForcedMeasurement();
 }
 
 bool Bme::read(float &t_C, float &p_C, float &h_C)
@@ -67,8 +69,7 @@ float Bme::readHumidity(void)
 
 void Bme::setTemperatureCompensation(float offset)
 {
-    if (!_ok)
-        return;
     _t_Comp = offset;
-    _bme.setTemperatureCompensation(offset);
+    if (_ok)
+        _bme.setTemperatureCompensation(offset);
 }

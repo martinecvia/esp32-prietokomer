@@ -9,22 +9,22 @@
 using namespace flow_meter_test;
 #include "web.h"
 
-#include "modules/mem.h"
 #include "modules/led.h"
 #include "modules/lcd.h"
 #include "modules/rtc.h"
 #include "modules/bme.h"
 #include "modules/sdw.h"
+#include "modules/mem.h"
 #include "modules/sdw_test.h"
 using namespace sdw_test;
 
-Mem mem;
 Led led;
 Lcd<Adafruit_SH1106G> lcd(128, 64);
 Rtc rtc;
 Bme bme;
 Sdw sdw;
 Btn bt1, bt2;
+Mem mem;
 
 Isr isr;
 FlowMeter flow(1.0f); // K = 1
@@ -100,7 +100,7 @@ uint32_t led_update = 0, lcd_update = 0, sdw_update = 0;
 void makeNewFile(const DateTime &dt)
 {
     char filename[32];
-    snprintf(filename, sizeof(filename), "/flowrate_%04u-%02u-%02u_%02u-%02u.csv",
+    snprintf(filename, sizeof(filename), "/flowrate_%04u-%02u-%02u_%02u-%02u-%02u.csv",
              dt.year(), dt.month(), dt.day(), dt.hour(), dt.minute(), dt.second());
     if (!sdw.openNewFile(filename))
         return;
@@ -163,6 +163,14 @@ void setup()
             Serial.println(addr, HEX);
         }
     }
+
+    if (!mem.begin(__ADDR_I2C_24LC01))
+    {
+        Serial.println("! MEM init failed");
+    }
+
+    // Memory fetch settings
+    // TODO
 
     if (!lcd.begin(__ADDR_I2C_SSD1306))
     {
